@@ -572,6 +572,37 @@
             }
         }
 
+        // Embed logo if present
+        if (logoImage) {
+            const scale = parseInt(document.getElementById('logo-scale').value) / 100;
+            const maxLogoSize = svgSize * scale;
+            const ratio = logoImage.width / logoImage.height;
+            let lw, lh;
+            if (ratio >= 1) { lw = maxLogoSize; lh = maxLogoSize / ratio; }
+            else { lh = maxLogoSize; lw = maxLogoSize * ratio; }
+            const padding = 10 * (svgSize / 600);
+            const bgW = lw + padding * 2;
+            const bgH = lh + padding * 2;
+            const bgX = (svgSize - bgW) / 2;
+            const bgY = (svgSize - bgH) / 2;
+            const lx = (svgSize - lw) / 2;
+            const ly = (svgSize - lh) / 2;
+            const bgFill = `rgb(${bg.r},${bg.g},${bg.b})`;
+
+            svgParts.push(`<rect x="${bgX.toFixed(2)}" y="${bgY.toFixed(2)}" width="${bgW.toFixed(2)}" height="${bgH.toFixed(2)}" rx="${padding.toFixed(2)}" fill="${bgFill}"/>`);
+
+            // Convert logo to base64 data URI via an offscreen canvas
+            const tmpC = document.createElement('canvas');
+            tmpC.width = logoImage.naturalWidth || logoImage.width;
+            tmpC.height = logoImage.naturalHeight || logoImage.height;
+            const tmpCtx = tmpC.getContext('2d');
+            tmpCtx.drawImage(logoImage, 0, 0);
+            let logoDataURI;
+            try { logoDataURI = tmpC.toDataURL('image/png'); } catch(e) { logoDataURI = logoImage.src; }
+
+            svgParts.push(`<image x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" width="${lw.toFixed(2)}" height="${lh.toFixed(2)}" href="${logoDataURI}" preserveAspectRatio="xMidYMid meet"/>`);
+        }
+
         svgParts.push('</svg>');
         const svgStr = svgParts.join('\n');
 
