@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRCraft — Beautiful QR Code Generator</title>
+    <meta name="description" content="Generate beautiful QR codes with gradients, custom finder patterns, circular modules, logo overlays, and animation. Free, no signup, runs entirely in your browser.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .color-swatch { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #e5e7eb; cursor: pointer; }
+        .color-swatch:hover { border-color: #6366f1; }
+        input[type="color"] { opacity: 0; position: absolute; width: 0; height: 0; }
+        .preset-btn { transition: all 0.15s; }
+        .preset-btn:hover { transform: scale(1.05); }
+        .preset-btn.active { ring: 2px; outline: 2px solid #6366f1; outline-offset: 2px; }
+        #qr-canvas { image-rendering: auto; }
+        .download-btn { transition: all 0.15s; }
+        .download-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <circle cx="17.5" cy="17.5" r="3"/>
+                    </svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-900">QRCraft</h1>
+            </div>
+            <a href="https://github.com/salusfintech/qrcraft" target="_blank" class="text-gray-500 hover:text-gray-900 flex items-center gap-2 text-sm">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                GitHub
+            </a>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+        <div class="text-center mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">Beautiful QR Code Generator</h2>
+            <p class="text-gray-500">Gradients, custom shapes, logo overlays, and animation. Free, no signup, runs in your browser.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Controls -->
+            <div class="space-y-6">
+                <!-- URL Input -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">URL or Text</label>
+                    <input type="text" id="url-input" value="https://example.com"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                        placeholder="https://example.com">
+                </div>
+
+                <!-- Color Presets -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">Color Presets</label>
+                    <div class="grid grid-cols-4 sm:grid-cols-6 gap-2" id="presets-grid">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+
+                <!-- Custom Colors -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">Custom Colors</label>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Color 1</label>
+                            <div class="relative">
+                                <div id="fg1-swatch" class="color-swatch" style="background:#1400FF;" onclick="document.getElementById('fg1-picker').click()"></div>
+                                <input type="color" id="fg1-picker" value="#1400FF">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Color 2</label>
+                            <div class="relative">
+                                <div id="fg2-swatch" class="color-swatch" style="background:#7B00FF;" onclick="document.getElementById('fg2-picker').click()"></div>
+                                <input type="color" id="fg2-picker" value="#7B00FF">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Background</label>
+                            <div class="relative">
+                                <div id="bg-swatch" class="color-swatch" style="background:#FFFFFF;" onclick="document.getElementById('bg-picker').click()"></div>
+                                <input type="color" id="bg-picker" value="#FFFFFF">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Style Options -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">Style</label>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="opt-gradient" checked class="w-4 h-4 text-indigo-600 rounded">
+                            <span class="text-sm text-gray-700">Gradient fill</span>
+                        </label>
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="opt-circles" checked class="w-4 h-4 text-indigo-600 rounded">
+                            <span class="text-sm text-gray-700">Circular modules</span>
+                        </label>
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="opt-finders" checked class="w-4 h-4 text-indigo-600 rounded">
+                            <span class="text-sm text-gray-700">Custom finder patterns</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Logo Upload -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">Logo Overlay</label>
+                    <div class="flex items-center gap-4">
+                        <label class="flex-1 flex items-center justify-center px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-indigo-400 transition-colors">
+                            <span class="text-sm text-gray-500" id="logo-label">Click to upload logo</span>
+                            <input type="file" id="logo-upload" accept="image/*" class="hidden">
+                        </label>
+                        <button id="remove-logo" class="hidden px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">Remove</button>
+                    </div>
+                    <div class="mt-3">
+                        <label class="block text-xs text-gray-500 mb-1">Logo Size: <span id="logo-scale-val">25%</span></label>
+                        <input type="range" id="logo-scale" min="10" max="40" value="25" class="w-full accent-indigo-600">
+                    </div>
+                </div>
+
+                <!-- Animation -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">Animation</label>
+                    <label class="flex items-center gap-3 cursor-pointer mb-3">
+                        <input type="checkbox" id="opt-animate" class="w-4 h-4 text-indigo-600 rounded">
+                        <span class="text-sm text-gray-700">Animate gradient rotation</span>
+                    </label>
+                    <div id="anim-controls" class="hidden space-y-2">
+                        <label class="block text-xs text-gray-500">Speed: <span id="speed-val">Medium</span></label>
+                        <input type="range" id="anim-speed" min="1" max="5" value="3" class="w-full accent-indigo-600">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview + Download -->
+            <div>
+                <div class="sticky top-8">
+                    <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-semibold text-gray-700">Preview</span>
+                            <span class="text-xs text-gray-400" id="qr-info"></span>
+                        </div>
+                        <div class="flex items-center justify-center bg-gray-50 rounded-lg p-4 mb-4">
+                            <canvas id="qr-canvas" width="600" height="600" class="max-w-full rounded"></canvas>
+                        </div>
+                        <div class="flex gap-3">
+                            <button onclick="downloadPNG()" class="download-btn flex-1 bg-indigo-600 text-white py-3 px-4 rounded-lg font-medium text-sm hover:bg-indigo-700">
+                                Download PNG
+                            </button>
+                            <button onclick="downloadSVG()" class="download-btn flex-1 bg-white text-gray-700 py-3 px-4 rounded-lg font-medium text-sm border border-gray-300 hover:bg-gray-50">
+                                Download SVG
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="text-center text-xs text-gray-400 mt-4">
+                        Made with <a href="https://github.com/salusfintech/qrcraft" class="text-indigo-500 hover:underline">QRCraft</a>
+                        by <a href="https://salusfintech.com" class="text-indigo-500 hover:underline">Salus Financial Technology</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+    // ========== Color Presets ==========
+    const PRESETS = [
+        { name: 'Salus',         c1: '#1400FF', c2: '#7B00FF' },
+        { name: 'Ocean',         c1: '#0066FF', c2: '#00CCCC' },
+        { name: 'Sunset',        c1: '#FF6600', c2: '#CC0066' },
+        { name: 'Forest',        c1: '#00C853', c2: '#00838F' },
+        { name: 'Berry',         c1: '#9C27B0', c2: '#E91E63' },
+        { name: 'Midnight',      c1: '#1A1A2E', c2: '#16213E' },
+        { name: 'Fire',          c1: '#FF4500', c2: '#FFD700' },
+        { name: 'Mint',          c1: '#00BFA5', c2: '#64FFDA' },
+        { name: 'Rose',          c1: '#FF1744', c2: '#F50057' },
+        { name: 'Slate',         c1: '#334155', c2: '#64748B' },
+        { name: 'Classic',       c1: '#000000', c2: '#000000' },
+        { name: 'Coral',         c1: '#FF6B6B', c2: '#FFA07A' },
+    ];
+
+    const presetsGrid = document.getElementById('presets-grid');
+    PRESETS.forEach((p, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'preset-btn flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-gray-50';
+        btn.innerHTML = `
+            <div class="w-8 h-8 rounded-full" style="background: linear-gradient(135deg, ${p.c1}, ${p.c2});"></div>
+            <span class="text-[10px] text-gray-500">${p.name}</span>
+        `;
+        btn.onclick = () => {
+            document.getElementById('fg1-picker').value = p.c1;
+            document.getElementById('fg2-picker').value = p.c2;
+            document.getElementById('fg1-swatch').style.background = p.c1;
+            document.getElementById('fg2-swatch').style.background = p.c2;
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderQR();
+        };
+        presetsGrid.appendChild(btn);
+    });
+
+    // ========== State ==========
+    let logoImage = null;
+    let animationId = null;
+    let animAngle = 0;
+
+    // ========== QR Generation ==========
+    function getQRMatrix(text, ecLevel) {
+        const qr = qrcode(0, ecLevel || 'H');
+        qr.addData(text);
+        qr.make();
+        const count = qr.getModuleCount();
+        const matrix = [];
+        for (let r = 0; r < count; r++) {
+            const row = [];
+            for (let c = 0; c < count; c++) {
+                row.push(qr.isDark(r, c));
+            }
+            matrix.push(row);
+        }
+        return { matrix, count };
+    }
+
+    function hexToRGB(hex) {
+        hex = hex.replace('#', '');
+        return {
+            r: parseInt(hex.substr(0, 2), 16),
+            g: parseInt(hex.substr(2, 2), 16),
+            b: parseInt(hex.substr(4, 2), 16),
+        };
+    }
+
+    function lerpColor(c1, c2, t) {
+        return {
+            r: Math.round(c1.r + (c2.r - c1.r) * t),
+            g: Math.round(c1.g + (c2.g - c1.g) * t),
+            b: Math.round(c1.b + (c2.b - c1.b) * t),
+        };
+    }
+
+    function isFinderModule(row, col, count) {
+        const finders = [[0, 0], [0, count - 7], [count - 7, 0]];
+        for (const [fr, fc] of finders) {
+            if (row >= fr && row < fr + 7 && col >= fc && col < fc + 7) return true;
+        }
+        return false;
+    }
+
+    function drawFinderPattern(ctx, cx, cy, size, color, bgColor) {
+        const r = size / 2;
+        // Outer rounded square
+        ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
+        roundRect(ctx, cx - r, cy - r, size, size, size * 0.25);
+        ctx.fill();
+        // Middle gap
+        const mid = size * 0.72;
+        ctx.fillStyle = `rgb(${bgColor.r},${bgColor.g},${bgColor.b})`;
+        roundRect(ctx, cx - mid/2, cy - mid/2, mid, mid, size * 0.18);
+        ctx.fill();
+        // Inner circle
+        const inner = size * 0.21;
+        ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function roundRect(ctx, x, y, w, h, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + w - radius, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        ctx.lineTo(x + w, y + h - radius);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        ctx.lineTo(x + radius, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+    }
+
+    function renderQR(angle) {
+        const canvas = document.getElementById('qr-canvas');
+        const ctx = canvas.getContext('2d');
+        const size = canvas.width;
+
+        const url = document.getElementById('url-input').value || 'https://example.com';
+        const fg1 = hexToRGB(document.getElementById('fg1-picker').value);
+        const fg2 = hexToRGB(document.getElementById('fg2-picker').value);
+        const bg = hexToRGB(document.getElementById('bg-picker').value);
+        const useGradient = document.getElementById('opt-gradient').checked;
+        const useCircles = document.getElementById('opt-circles').checked;
+        const useFinders = document.getElementById('opt-finders').checked;
+        const gradAngle = angle !== undefined ? angle : 45;
+
+        let qrData;
+        try {
+            qrData = getQRMatrix(url, 'H');
+        } catch (e) {
+            ctx.fillStyle = `rgb(${bg.r},${bg.g},${bg.b})`;
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#999';
+            ctx.font = '14px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Enter a URL or text above', size/2, size/2);
+            return;
+        }
+
+        const { matrix, count } = qrData;
+        const border = 2;
+        const totalModules = count + border * 2;
+        const boxSize = size / totalModules;
+
+        document.getElementById('qr-info').textContent = `${count}×${count} modules`;
+
+        // Background
+        ctx.fillStyle = `rgb(${bg.r},${bg.g},${bg.b})`;
+        ctx.fillRect(0, 0, size, size);
+
+        // Draw data modules
+        const angleRad = gradAngle * Math.PI / 180;
+        for (let row = 0; row < count; row++) {
+            for (let col = 0; col < count; col++) {
+                if (!matrix[row][col]) continue;
+                if (useFinders && isFinderModule(row, col, count)) continue;
+
+                const x0 = (col + border) * boxSize;
+                const y0 = (row + border) * boxSize;
+                const cx = x0 + boxSize / 2;
+                const cy = y0 + boxSize / 2;
+
+                let color = fg1;
+                if (useGradient) {
+                    const nx = col / count - 0.5;
+                    const ny = row / count - 0.5;
+                    const proj = nx * Math.cos(angleRad) + ny * Math.sin(angleRad);
+                    const t = Math.max(0, Math.min(1, proj + 0.5));
+                    color = lerpColor(fg1, fg2, t);
+                }
+
+                ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
+
+                if (useCircles) {
+                    const r = boxSize * 0.42;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.fillRect(x0, y0, boxSize, boxSize);
+                }
+            }
+        }
+
+        // Draw finder patterns
+        if (useFinders) {
+            const finderPositions = [
+                [3.5, 3.5],
+                [3.5, count - 3.5],
+                [count - 3.5, 3.5],
+            ];
+            const finderSize = boxSize * 7;
+            for (const [fr, fc] of finderPositions) {
+                const cx = (fc + border) * boxSize;
+                const cy = (fr + border) * boxSize;
+                let color = fg1;
+                if (useGradient) {
+                    const nx = fc / count - 0.5;
+                    const ny = fr / count - 0.5;
+                    const proj = nx * Math.cos(angleRad) + ny * Math.sin(angleRad);
+                    const t = Math.max(0, Math.min(1, proj + 0.5));
+                    color = lerpColor(fg1, fg2, t);
+                }
+                drawFinderPattern(ctx, cx, cy, finderSize, color, bg);
+            }
+        }
+
+        // Draw logo
+        if (logoImage) {
+            const scale = parseInt(document.getElementById('logo-scale').value) / 100;
+            const maxLogoSize = size * scale;
+            const ratio = logoImage.width / logoImage.height;
+            let lw, lh;
+            if (ratio >= 1) {
+                lw = maxLogoSize;
+                lh = maxLogoSize / ratio;
+            } else {
+                lh = maxLogoSize;
+                lw = maxLogoSize * ratio;
+            }
+            const padding = 10;
+            const bgW = lw + padding * 2;
+            const bgH = lh + padding * 2;
+            const bgX = (size - bgW) / 2;
+            const bgY = (size - bgH) / 2;
+
+            ctx.fillStyle = `rgb(${bg.r},${bg.g},${bg.b})`;
+            roundRect(ctx, bgX, bgY, bgW, bgH, padding);
+            ctx.fill();
+
+            const lx = (size - lw) / 2;
+            const ly = (size - lh) / 2;
+            ctx.drawImage(logoImage, lx, ly, lw, lh);
+        }
+    }
+
+    // ========== Animation ==========
+    function startAnimation() {
+        stopAnimation();
+        const speeds = [0.5, 1, 2, 3, 5];
+        const speed = speeds[parseInt(document.getElementById('anim-speed').value) - 1];
+        function frame() {
+            animAngle = (animAngle + speed) % 360;
+            renderQR(animAngle);
+            animationId = requestAnimationFrame(frame);
+        }
+        animationId = requestAnimationFrame(frame);
+    }
+
+    function stopAnimation() {
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+    }
+
+    // ========== Downloads ==========
+    function downloadPNG() {
+        // Render at high res for download
+        const canvas = document.createElement('canvas');
+        canvas.width = 2000;
+        canvas.height = 2000;
+        const origCanvas = document.getElementById('qr-canvas');
+        const origW = origCanvas.width;
+        const origH = origCanvas.height;
+
+        // Temporarily swap canvas
+        const qrCanvas = document.getElementById('qr-canvas');
+        const tempW = qrCanvas.width;
+        const tempH = qrCanvas.height;
+        qrCanvas.width = 2000;
+        qrCanvas.height = 2000;
+        renderQR(document.getElementById('opt-animate').checked ? animAngle : 45);
+
+        const link = document.createElement('a');
+        link.download = 'qrcraft.png';
+        link.href = qrCanvas.toDataURL('image/png');
+        link.click();
+
+        // Restore
+        qrCanvas.width = tempW;
+        qrCanvas.height = tempH;
+        renderQR(document.getElementById('opt-animate').checked ? animAngle : 45);
+    }
+
+    function downloadSVG() {
+        const url = document.getElementById('url-input').value || 'https://example.com';
+        const fg1 = hexToRGB(document.getElementById('fg1-picker').value);
+        const fg2 = hexToRGB(document.getElementById('fg2-picker').value);
+        const bg = hexToRGB(document.getElementById('bg-picker').value);
+        const useGradient = document.getElementById('opt-gradient').checked;
+        const useCircles = document.getElementById('opt-circles').checked;
+        const useFinders = document.getElementById('opt-finders').checked;
+
+        let qrData;
+        try { qrData = getQRMatrix(url, 'H'); } catch(e) { return; }
+
+        const { matrix, count } = qrData;
+        const border = 2;
+        const totalModules = count + border * 2;
+        const svgSize = 1000;
+        const boxSize = svgSize / totalModules;
+        const angleRad = 45 * Math.PI / 180;
+
+        let svgParts = [];
+        svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgSize} ${svgSize}" width="${svgSize}" height="${svgSize}">`);
+        svgParts.push(`<rect width="${svgSize}" height="${svgSize}" fill="rgb(${bg.r},${bg.g},${bg.b})"/>`);
+
+        // Data modules
+        for (let row = 0; row < count; row++) {
+            for (let col = 0; col < count; col++) {
+                if (!matrix[row][col]) continue;
+                if (useFinders && isFinderModule(row, col, count)) continue;
+                const x = (col + border) * boxSize;
+                const y = (row + border) * boxSize;
+                const cx = x + boxSize / 2;
+                const cy = y + boxSize / 2;
+
+                let color = fg1;
+                if (useGradient) {
+                    const nx = col / count - 0.5;
+                    const ny = row / count - 0.5;
+                    const proj = nx * Math.cos(angleRad) + ny * Math.sin(angleRad);
+                    const t = Math.max(0, Math.min(1, proj + 0.5));
+                    color = lerpColor(fg1, fg2, t);
+                }
+                const fill = `rgb(${color.r},${color.g},${color.b})`;
+
+                if (useCircles) {
+                    const r = boxSize * 0.42;
+                    svgParts.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="${fill}"/>`);
+                } else {
+                    svgParts.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${boxSize.toFixed(2)}" height="${boxSize.toFixed(2)}" fill="${fill}"/>`);
+                }
+            }
+        }
+
+        // Finder patterns (simplified for SVG)
+        if (useFinders) {
+            const finderPositions = [[3.5, 3.5], [3.5, count - 3.5], [count - 3.5, 3.5]];
+            const fs = boxSize * 7;
+            for (const [fr, fc] of finderPositions) {
+                const cx = (fc + border) * boxSize;
+                const cy = (fr + border) * boxSize;
+                let color = fg1;
+                if (useGradient) {
+                    const nx = fc / count - 0.5;
+                    const ny = fr / count - 0.5;
+                    const proj = nx * Math.cos(angleRad) + ny * Math.sin(angleRad);
+                    const t = Math.max(0, Math.min(1, proj + 0.5));
+                    color = lerpColor(fg1, fg2, t);
+                }
+                const fill = `rgb(${color.r},${color.g},${color.b})`;
+                const bgFill = `rgb(${bg.r},${bg.g},${bg.b})`;
+                const ro = fs / 2;
+                const rr = fs * 0.25;
+                svgParts.push(`<rect x="${(cx-ro).toFixed(2)}" y="${(cy-ro).toFixed(2)}" width="${fs.toFixed(2)}" height="${fs.toFixed(2)}" rx="${rr.toFixed(2)}" fill="${fill}"/>`);
+                const mid = fs * 0.72;
+                const mrr = fs * 0.18;
+                svgParts.push(`<rect x="${(cx-mid/2).toFixed(2)}" y="${(cy-mid/2).toFixed(2)}" width="${mid.toFixed(2)}" height="${mid.toFixed(2)}" rx="${mrr.toFixed(2)}" fill="${bgFill}"/>`);
+                const ir = fs * 0.21;
+                svgParts.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${ir.toFixed(2)}" fill="${fill}"/>`);
+            }
+        }
+
+        svgParts.push('</svg>');
+        const svgStr = svgParts.join('\n');
+
+        const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+        const link = document.createElement('a');
+        link.download = 'qrcraft.svg';
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
+    // ========== Event Listeners ==========
+    document.getElementById('url-input').addEventListener('input', () => renderQR());
+    document.getElementById('fg1-picker').addEventListener('input', (e) => {
+        document.getElementById('fg1-swatch').style.background = e.target.value;
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        renderQR();
+    });
+    document.getElementById('fg2-picker').addEventListener('input', (e) => {
+        document.getElementById('fg2-swatch').style.background = e.target.value;
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        renderQR();
+    });
+    document.getElementById('bg-picker').addEventListener('input', (e) => {
+        document.getElementById('bg-swatch').style.background = e.target.value;
+        renderQR();
+    });
+    document.getElementById('opt-gradient').addEventListener('change', () => renderQR());
+    document.getElementById('opt-circles').addEventListener('change', () => renderQR());
+    document.getElementById('opt-finders').addEventListener('change', () => renderQR());
+    document.getElementById('logo-scale').addEventListener('input', (e) => {
+        document.getElementById('logo-scale-val').textContent = e.target.value + '%';
+        renderQR();
+    });
+
+    document.getElementById('logo-upload').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const img = new Image();
+            img.onload = () => {
+                logoImage = img;
+                document.getElementById('logo-label').textContent = file.name;
+                document.getElementById('remove-logo').classList.remove('hidden');
+                renderQR();
+            };
+            img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    document.getElementById('remove-logo').addEventListener('click', () => {
+        logoImage = null;
+        document.getElementById('logo-upload').value = '';
+        document.getElementById('logo-label').textContent = 'Click to upload logo';
+        document.getElementById('remove-logo').classList.add('hidden');
+        renderQR();
+    });
+
+    document.getElementById('opt-animate').addEventListener('change', (e) => {
+        const controls = document.getElementById('anim-controls');
+        if (e.target.checked) {
+            controls.classList.remove('hidden');
+            startAnimation();
+        } else {
+            controls.classList.add('hidden');
+            stopAnimation();
+            renderQR(45);
+        }
+    });
+
+    document.getElementById('anim-speed').addEventListener('input', (e) => {
+        const labels = ['Very Slow', 'Slow', 'Medium', 'Fast', 'Very Fast'];
+        document.getElementById('speed-val').textContent = labels[parseInt(e.target.value) - 1];
+        if (document.getElementById('opt-animate').checked) {
+            startAnimation();
+        }
+    });
+
+    // ========== Initial Render ==========
+    renderQR(45);
+    </script>
+</body>
+</html>
