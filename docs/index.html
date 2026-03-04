@@ -119,16 +119,25 @@
                 <!-- Logo Upload -->
                 <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
                     <label class="block text-sm font-semibold text-gray-700 mb-3">Logo Overlay</label>
+                    <div id="logo-thumbs" class="flex flex-wrap gap-2 mb-3"></div>
                     <div class="flex items-center gap-4">
                         <label class="flex-1 flex items-center justify-center px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-indigo-400 transition-colors">
-                            <span class="text-sm text-gray-500" id="logo-label">Click to upload logo</span>
-                            <input type="file" id="logo-upload" accept="image/*" class="hidden">
+                            <span class="text-sm text-gray-500" id="logo-label">Click to add logo</span>
+                            <input type="file" id="logo-upload" accept="image/*" multiple class="hidden">
                         </label>
-                        <button id="remove-logo" class="hidden px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">Remove</button>
+                        <button id="remove-all-logos" class="hidden px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">Clear all</button>
                     </div>
                     <div class="mt-3">
                         <label class="block text-xs text-gray-500 mb-1">Logo Size: <span id="logo-scale-val">25%</span></label>
                         <input type="range" id="logo-scale" min="10" max="40" value="25" class="w-full accent-indigo-600">
+                    </div>
+                    <div id="logo-transition-controls" class="hidden mt-3 space-y-2">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="opt-logo-transition" checked class="w-4 h-4 text-indigo-600 rounded">
+                            <span class="text-sm text-gray-700">Crossfade between logos</span>
+                        </label>
+                        <label class="block text-xs text-gray-500">Interval: <span id="logo-interval-val">3s</span></label>
+                        <input type="range" id="logo-interval" min="1" max="10" value="3" class="w-full accent-indigo-600">
                     </div>
                 </div>
 
@@ -214,9 +223,16 @@
     });
 
     // ========== State ==========
-    let logoImage = null;
+    let logos = [];           // Array of { img: Image, name: String }
+    let currentLogoIndex = 0;
+    let logoImage = null;     // Currently visible logo (for rendering)
+    let logoFadeAlpha = 1;    // 0..1 opacity for crossfade
+    let logoFadeOut = null;   // Outgoing logo during crossfade
+    let logoTransitionTimer = null;
+    let logoTransitionStart = null;
     let animationId = null;
     let animAngle = 0;
+    const FADE_DURATION = 600; // ms for crossfade
 
     // ========== QR Generation ==========
     function getQRMatrix(text, ecLevel) {
@@ -388,32 +404,37 @@
             }
         }
 
-        // Draw logo
-        if (logoImage) {
+        // Draw logo(s) with crossfade support
+        function drawSingleLogo(ctx, img, size, bg, alpha) {
+            if (!img) return;
             const scale = parseInt(document.getElementById('logo-scale').value) / 100;
             const maxLogoSize = size * scale;
-            const ratio = logoImage.width / logoImage.height;
+            const ratio = img.width / img.height;
             let lw, lh;
-            if (ratio >= 1) {
-                lw = maxLogoSize;
-                lh = maxLogoSize / ratio;
-            } else {
-                lh = maxLogoSize;
-                lw = maxLogoSize * ratio;
-            }
+            if (ratio >= 1) { lw = maxLogoSize; lh = maxLogoSize / ratio; }
+            else { lh = maxLogoSize; lw = maxLogoSize * ratio; }
             const padding = 10;
             const bgW = lw + padding * 2;
             const bgH = lh + padding * 2;
             const bgX = (size - bgW) / 2;
             const bgY = (size - bgH) / 2;
 
+            ctx.save();
+            ctx.globalAlpha = alpha;
             ctx.fillStyle = `rgb(${bg.r},${bg.g},${bg.b})`;
             roundRect(ctx, bgX, bgY, bgW, bgH, padding);
             ctx.fill();
-
             const lx = (size - lw) / 2;
             const ly = (size - lh) / 2;
-            ctx.drawImage(logoImage, lx, ly, lw, lh);
+            ctx.drawImage(img, lx, ly, lw, lh);
+            ctx.restore();
+        }
+
+        if (logoFadeOut && logoFadeAlpha < 1) {
+            drawSingleLogo(ctx, logoFadeOut, size, bg, 1 - logoFadeAlpha);
+            drawSingleLogo(ctx, logoImage, size, bg, logoFadeAlpha);
+        } else if (logoImage) {
+            drawSingleLogo(ctx, logoImage, size, bg, 1);
         }
     }
 
@@ -586,29 +607,168 @@
         renderQR();
     });
 
-    document.getElementById('logo-upload').addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            const img = new Image();
-            img.onload = () => {
-                logoImage = img;
-                document.getElementById('logo-label').textContent = file.name;
-                document.getElementById('remove-logo').classList.remove('hidden');
+    // ========== Logo Management ==========
+    function addLogo(img, name) {
+        logos.push({ img, name });
+        if (logos.length === 1) {
+            currentLogoIndex = 0;
+            logoImage = img;
+        }
+        updateLogoUI();
+        renderQR();
+    }
+
+    function removeLogo(index) {
+        logos.splice(index, 1);
+        stopLogoTransition();
+        if (logos.length === 0) {
+            currentLogoIndex = 0;
+            logoImage = null;
+            logoFadeOut = null;
+            logoFadeAlpha = 1;
+        } else {
+            currentLogoIndex = currentLogoIndex % logos.length;
+            logoImage = logos[currentLogoIndex].img;
+            logoFadeOut = null;
+            logoFadeAlpha = 1;
+            if (logos.length > 1 && document.getElementById('opt-logo-transition').checked) {
+                startLogoTransition();
+            }
+        }
+        updateLogoUI();
+        renderQR();
+    }
+
+    function clearAllLogos() {
+        logos = [];
+        currentLogoIndex = 0;
+        logoImage = null;
+        logoFadeOut = null;
+        logoFadeAlpha = 1;
+        stopLogoTransition();
+        document.getElementById('logo-upload').value = '';
+        updateLogoUI();
+        renderQR();
+    }
+
+    function updateLogoUI() {
+        const thumbs = document.getElementById('logo-thumbs');
+        thumbs.innerHTML = '';
+        logos.forEach((logo, i) => {
+            const chip = document.createElement('div');
+            chip.className = 'relative group flex items-center gap-1.5 px-2 py-1 bg-gray-100 rounded-lg border ' +
+                (i === currentLogoIndex ? 'border-indigo-400 ring-1 ring-indigo-200' : 'border-gray-200');
+            chip.innerHTML = `
+                <img src="${logo.img.src}" class="w-6 h-6 object-contain rounded">
+                <span class="text-xs text-gray-600 max-w-[80px] truncate">${logo.name}</span>
+                <button class="ml-1 text-gray-400 hover:text-red-500 text-xs font-bold" title="Remove">&times;</button>
+            `;
+            chip.querySelector('button').onclick = (e) => { e.stopPropagation(); removeLogo(i); };
+            chip.onclick = () => {
+                currentLogoIndex = i;
+                logoImage = logos[i].img;
+                logoFadeOut = null;
+                logoFadeAlpha = 1;
+                updateLogoUI();
                 renderQR();
             };
-            img.src = ev.target.result;
-        };
-        reader.readAsDataURL(file);
+            thumbs.appendChild(chip);
+        });
+
+        const clearBtn = document.getElementById('remove-all-logos');
+        const transControls = document.getElementById('logo-transition-controls');
+        if (logos.length > 0) {
+            clearBtn.classList.remove('hidden');
+        } else {
+            clearBtn.classList.add('hidden');
+        }
+        if (logos.length > 1) {
+            transControls.classList.remove('hidden');
+        } else {
+            transControls.classList.add('hidden');
+        }
+    }
+
+    // ========== Logo Crossfade ==========
+    function startLogoTransition() {
+        stopLogoTransition();
+        if (logos.length < 2) return;
+        const intervalMs = parseInt(document.getElementById('logo-interval').value) * 1000;
+        logoTransitionTimer = setInterval(() => {
+            triggerCrossfade();
+        }, intervalMs);
+    }
+
+    function stopLogoTransition() {
+        if (logoTransitionTimer) {
+            clearInterval(logoTransitionTimer);
+            logoTransitionTimer = null;
+        }
+        logoTransitionStart = null;
+    }
+
+    function triggerCrossfade() {
+        if (logos.length < 2) return;
+        logoFadeOut = logoImage;
+        currentLogoIndex = (currentLogoIndex + 1) % logos.length;
+        logoImage = logos[currentLogoIndex].img;
+        logoFadeAlpha = 0;
+        logoTransitionStart = performance.now();
+        updateLogoUI();
+
+        function fadeStep(ts) {
+            const elapsed = ts - logoTransitionStart;
+            logoFadeAlpha = Math.min(1, elapsed / FADE_DURATION);
+            if (logoFadeAlpha >= 1) {
+                logoFadeOut = null;
+                logoFadeAlpha = 1;
+                renderQR(document.getElementById('opt-animate').checked ? animAngle : 45);
+                return;
+            }
+            renderQR(document.getElementById('opt-animate').checked ? animAngle : 45);
+            requestAnimationFrame(fadeStep);
+        }
+        requestAnimationFrame(fadeStep);
+    }
+
+    // ========== Event Listeners (Logo) ==========
+    document.getElementById('logo-upload').addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+        let loaded = 0;
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    addLogo(img, file.name);
+                    loaded++;
+                    if (loaded === files.length && logos.length > 1 && document.getElementById('opt-logo-transition').checked) {
+                        startLogoTransition();
+                    }
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        e.target.value = '';
     });
 
-    document.getElementById('remove-logo').addEventListener('click', () => {
-        logoImage = null;
-        document.getElementById('logo-upload').value = '';
-        document.getElementById('logo-label').textContent = 'Click to upload logo';
-        document.getElementById('remove-logo').classList.add('hidden');
-        renderQR();
+    document.getElementById('remove-all-logos').addEventListener('click', clearAllLogos);
+
+    document.getElementById('opt-logo-transition').addEventListener('change', (e) => {
+        if (e.target.checked && logos.length > 1) {
+            startLogoTransition();
+        } else {
+            stopLogoTransition();
+        }
+    });
+
+    document.getElementById('logo-interval').addEventListener('input', (e) => {
+        document.getElementById('logo-interval-val').textContent = e.target.value + 's';
+        if (document.getElementById('opt-logo-transition').checked && logos.length > 1) {
+            startLogoTransition();
+        }
     });
 
     document.getElementById('opt-animate').addEventListener('change', (e) => {
@@ -635,19 +795,25 @@
     });
 
     // ========== Initial Render ==========
-    // Preload Salus unicolor logo
-    const defaultLogo = new Image();
-    defaultLogo.crossOrigin = 'anonymous';
-    defaultLogo.onload = () => {
-        logoImage = defaultLogo;
-        document.getElementById('logo-label').textContent = 'salus_blue_unicolor.png';
-        document.getElementById('remove-logo').classList.remove('hidden');
-        renderQR(45);
-    };
-    defaultLogo.onerror = () => {
-        renderQR(45);
-    };
-    defaultLogo.src = 'salus_blue_unicolor.png';
+    // Preload Salus logos
+    let defaultsToLoad = 2;
+    function onDefaultLoaded() {
+        defaultsToLoad--;
+        if (defaultsToLoad <= 0) {
+            if (logos.length > 1 && document.getElementById('opt-logo-transition').checked) {
+                startLogoTransition();
+            }
+            renderQR(45);
+        }
+    }
+
+    ['salus_blue_unicolor.png', 'salus_transparent_uniform_color.png'].forEach(name => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => { addLogo(img, name); onDefaultLoaded(); };
+        img.onerror = () => { onDefaultLoaded(); };
+        img.src = name;
+    });
     renderQR(45);
     </script>
 </body>
