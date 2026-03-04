@@ -468,12 +468,15 @@
 
     function downloadSVG() {
         const url = document.getElementById('url-input').value || 'https://example.com';
-        const fg1 = hexToRGB(document.getElementById('fg1-picker').value);
-        const fg2 = hexToRGB(document.getElementById('fg2-picker').value);
+        const fg1Hex = document.getElementById('fg1-picker').value;
+        const fg2Hex = document.getElementById('fg2-picker').value;
+        const fg1 = hexToRGB(fg1Hex);
+        const fg2 = hexToRGB(fg2Hex);
         const bg = hexToRGB(document.getElementById('bg-picker').value);
         const useGradient = document.getElementById('opt-gradient').checked;
         const useCircles = document.getElementById('opt-circles').checked;
         const useFinders = document.getElementById('opt-finders').checked;
+        const useAnimate = document.getElementById('opt-animate').checked;
 
         let qrData;
         try { qrData = getQRMatrix(url, 'H'); } catch(e) { return; }
@@ -483,11 +486,32 @@
         const totalModules = count + border * 2;
         const svgSize = 1000;
         const boxSize = svgSize / totalModules;
-        const angleRad = 45 * Math.PI / 180;
+        const gradAngle = useAnimate ? animAngle : 45;
+        const angleRad = gradAngle * Math.PI / 180;
+        const halfSvg = svgSize / 2;
 
         let svgParts = [];
         svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgSize} ${svgSize}" width="${svgSize}" height="${svgSize}">`);
+
+        // Define gradient if needed
+        if (useGradient) {
+            svgParts.push(`<defs>`);
+            svgParts.push(`  <linearGradient id="qr-grad" x1="0%" y1="0%" x2="100%" y2="100%" gradientTransform="rotate(${gradAngle - 45}, 0.5, 0.5)" gradientUnits="objectBoundingBox">`);
+            svgParts.push(`    <stop offset="0%" stop-color="${fg1Hex}"/>`);
+            svgParts.push(`    <stop offset="100%" stop-color="${fg2Hex}"/>`);
+            if (useAnimate) {
+                const speeds = [0.5, 1, 2, 3, 5];
+                const speed = speeds[parseInt(document.getElementById('anim-speed').value) - 1];
+                const dur = (360 / (speed * 60)).toFixed(1);
+                svgParts.push(`    <animateTransform attributeName="gradientTransform" type="rotate" from="0 0.5 0.5" to="360 0.5 0.5" dur="${dur}s" repeatCount="indefinite"/>`);
+            }
+            svgParts.push(`  </linearGradient>`);
+            svgParts.push(`</defs>`);
+        }
+
         svgParts.push(`<rect width="${svgSize}" height="${svgSize}" fill="rgb(${bg.r},${bg.g},${bg.b})"/>`);
+
+        const gradFill = useGradient ? 'url(#qr-grad)' : `rgb(${fg1.r},${fg1.g},${fg1.b})`;
 
         // Data modules
         for (let row = 0; row < count; row++) {
@@ -499,50 +523,31 @@
                 const cx = x + boxSize / 2;
                 const cy = y + boxSize / 2;
 
-                let color = fg1;
-                if (useGradient) {
-                    const nx = col / count - 0.5;
-                    const ny = row / count - 0.5;
-                    const proj = nx * Math.cos(angleRad) + ny * Math.sin(angleRad);
-                    const t = Math.max(0, Math.min(1, proj + 0.5));
-                    color = lerpColor(fg1, fg2, t);
-                }
-                const fill = `rgb(${color.r},${color.g},${color.b})`;
-
                 if (useCircles) {
                     const r = boxSize * 0.42;
-                    svgParts.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="${fill}"/>`);
+                    svgParts.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="${gradFill}"/>`);
                 } else {
-                    svgParts.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${boxSize.toFixed(2)}" height="${boxSize.toFixed(2)}" fill="${fill}"/>`);
+                    svgParts.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${boxSize.toFixed(2)}" height="${boxSize.toFixed(2)}" fill="${gradFill}"/>`);
                 }
             }
         }
 
-        // Finder patterns (simplified for SVG)
+        // Finder patterns
         if (useFinders) {
             const finderPositions = [[3.5, 3.5], [3.5, count - 3.5], [count - 3.5, 3.5]];
             const fs = boxSize * 7;
+            const bgFill = `rgb(${bg.r},${bg.g},${bg.b})`;
             for (const [fr, fc] of finderPositions) {
                 const cx = (fc + border) * boxSize;
                 const cy = (fr + border) * boxSize;
-                let color = fg1;
-                if (useGradient) {
-                    const nx = fc / count - 0.5;
-                    const ny = fr / count - 0.5;
-                    const proj = nx * Math.cos(angleRad) + ny * Math.sin(angleRad);
-                    const t = Math.max(0, Math.min(1, proj + 0.5));
-                    color = lerpColor(fg1, fg2, t);
-                }
-                const fill = `rgb(${color.r},${color.g},${color.b})`;
-                const bgFill = `rgb(${bg.r},${bg.g},${bg.b})`;
                 const ro = fs / 2;
                 const rr = fs * 0.25;
-                svgParts.push(`<rect x="${(cx-ro).toFixed(2)}" y="${(cy-ro).toFixed(2)}" width="${fs.toFixed(2)}" height="${fs.toFixed(2)}" rx="${rr.toFixed(2)}" fill="${fill}"/>`);
+                svgParts.push(`<rect x="${(cx-ro).toFixed(2)}" y="${(cy-ro).toFixed(2)}" width="${fs.toFixed(2)}" height="${fs.toFixed(2)}" rx="${rr.toFixed(2)}" fill="${gradFill}"/>`);
                 const mid = fs * 0.72;
                 const mrr = fs * 0.18;
                 svgParts.push(`<rect x="${(cx-mid/2).toFixed(2)}" y="${(cy-mid/2).toFixed(2)}" width="${mid.toFixed(2)}" height="${mid.toFixed(2)}" rx="${mrr.toFixed(2)}" fill="${bgFill}"/>`);
                 const ir = fs * 0.21;
-                svgParts.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${ir.toFixed(2)}" fill="${fill}"/>`);
+                svgParts.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${ir.toFixed(2)}" fill="${gradFill}"/>`);
             }
         }
 
